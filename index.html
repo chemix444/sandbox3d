@@ -1,0 +1,1015 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Sandbox 3D</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body { width:100%; height:100%; overflow:hidden; background:#000; font-family:'Segoe UI',system-ui,sans-serif; color:#fff; user-select:none; }
+  canvas { display:block; }
+
+  #crosshair { position:fixed; top:50%; left:50%; width:4px; height:4px; margin:-2px 0 0 -2px; background:#fff; border-radius:50%; box-shadow:0 0 0 2px rgba(0,0,0,.5),0 0 6px rgba(0,0,0,.3); pointer-events:none; z-index:5; }
+  #crosshair::before, #crosshair::after { content:''; position:absolute; background:rgba(255,255,255,.6); }
+  #crosshair::before { width:1px; height:12px; left:1.5px; top:-6px; }
+  #crosshair::after { width:12px; height:1px; top:1.5px; left:-6px; }
+
+  #startScreen { position:fixed; inset:0; background:linear-gradient(135deg,#0a0e1a 0%,#1a1a2e 50%,#16213e 100%); z-index:50; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:24px; }
+  #startScreen h1 { font-size:52px; font-weight:800; letter-spacing:2px; background:linear-gradient(135deg,#6d54ff,#ff6b9d,#ffd84a); -webkit-background-clip:text; -webkit-text-fill-color:transparent; margin-bottom:8px; }
+  #startScreen .tag { font-size:16px; opacity:.65; margin-bottom:32px; max-width:460px; line-height:1.6; }
+  #startScreen .controls-info { font-size:13px; opacity:.55; line-height:2; margin-bottom:28px; }
+  #startScreen .controls-info kbd { display:inline-block; background:rgba(255,255,255,.1); padding:2px 8px; border-radius:4px; font-size:12px; border:1px solid rgba(255,255,255,.15); }
+  #startBtn { background:linear-gradient(135deg,#6d54ff,#9b7bff); border:none; color:#fff; font-size:20px; font-weight:700; padding:16px 48px; border-radius:12px; cursor:pointer; letter-spacing:1px; box-shadow:0 8px 32px rgba(109,84,255,.4); transition:transform .1s,box-shadow .1s; }
+  #startBtn:hover { transform:translateY(-2px); box-shadow:0 12px 40px rgba(109,84,255,.5); }
+
+  #hud { position:fixed; inset:0; pointer-events:none; z-index:4; }
+  #toolMode { position:fixed; top:12px; left:12px; font-size:13px; background:rgba(0,0,0,.5); padding:6px 14px; border-radius:8px; letter-spacing:.5px; backdrop-filter:blur(4px); }
+  #toolMode span { font-weight:700; color:#9b7bff; }
+  #stats { position:fixed; top:12px; right:12px; font-size:12px; background:rgba(0,0,0,.5); padding:6px 12px; border-radius:8px; backdrop-filter:blur(4px); text-align:right; line-height:1.6; }
+  #hint { position:fixed; bottom:80px; left:50%; transform:translateX(-50%); font-size:13px; background:rgba(0,0,0,.6); padding:8px 18px; border-radius:8px; opacity:0; transition:opacity .3s; backdrop-filter:blur(4px); }
+  #hint.show { opacity:1; }
+
+  #toolbar { position:fixed; bottom:0; left:0; right:0; z-index:10; background:linear-gradient(0deg,rgba(10,14,26,.95) 0%,rgba(10,14,26,.8) 100%); backdrop-filter:blur(8px); border-top:1px solid rgba(255,255,255,.08); display:flex; flex-direction:column; pointer-events:auto; }
+  #toolbarTabs { display:flex; gap:0; padding:0 12px; }
+  .tab { padding:8px 18px; font-size:12px; font-weight:600; letter-spacing:1px; color:rgba(255,255,255,.5); cursor:pointer; border-bottom:2px solid transparent; transition:all .15s; text-transform:uppercase; }
+  .tab:hover { color:rgba(255,255,255,.8); }
+  .tab.active { color:#9b7bff; border-bottom-color:#9b7bff; }
+  #toolbarContent { display:flex; flex-wrap:wrap; gap:6px; padding:10px 14px; max-height:160px; overflow-y:auto; align-items:flex-start; }
+  .spawnBtn { width:60px; height:60px; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.12); border-radius:8px; cursor:pointer; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; transition:all .12s; font-size:10px; color:rgba(255,255,255,.8); }
+  .spawnBtn:hover { background:rgba(109,84,255,.2); border-color:#6d54ff; transform:translateY(-2px); }
+  .spawnBtn .icon { font-size:22px; }
+  .spawnBtn .label { font-size:9px; opacity:.7; }
+
+  .toolBtn { padding:8px 16px; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.12); border-radius:8px; cursor:pointer; color:#fff; font-size:12px; transition:all .12s; }
+  .toolBtn:hover { background:rgba(109,84,255,.2); border-color:#6d54ff; }
+  .toolBtn.active { background:rgba(109,84,255,.3); border-color:#9b7bff; }
+  .toolBtn.danger:hover { background:rgba(226,59,92,.3); border-color:#e23b5c; }
+
+  #colorPickerWrap { display:flex; align-items:center; gap:8px; padding:4px 12px; background:rgba(255,255,255,.06); border-radius:8px; border:1px solid rgba(255,255,255,.1); }
+  #colorPickerWrap label { font-size:11px; opacity:.7; }
+  #colorInput { width:36px; height:36px; border:none; background:none; cursor:pointer; padding:0; }
+  #colorInput::-webkit-color-swatch-wrapper { padding:2px; }
+  #colorInput::-webkit-color-swatch { border:2px solid rgba(255,255,255,.2); border-radius:6px; }
+
+  #toast { position:fixed; top:60px; left:50%; transform:translateX(-50%); z-index:20; font-size:13px; background:rgba(0,0,0,.7); padding:8px 18px; border-radius:8px; opacity:0; transition:opacity .25s; pointer-events:none; backdrop-filter:blur(4px); }
+  #toast.show { opacity:1; }
+
+  ::-webkit-scrollbar { width:4px; }
+  ::-webkit-scrollbar-track { background:transparent; }
+  ::-webkit-scrollbar-thumb { background:rgba(255,255,255,.2); border-radius:2px; }
+
+  @media (max-width:600px) {
+    #startScreen h1 { font-size:32px; }
+    #toolbarContent { padding:6px 8px; gap:4px; }
+    .spawnBtn { width:50px; height:50px; }
+    .spawnBtn .icon { font-size:18px; }
+    .spawnBtn .label { display:none; }
+    #toolMode { font-size:11px; padding:4px 10px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="startScreen">
+  <h1>SANDBOX 3D</h1>
+  <div class="tag">A physics sandbox in your browser. Spawn, grab, build, destroy.</div>
+  <div class="controls-info">
+    <kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> Move &nbsp;·&nbsp;
+    <kbd>Mouse</kbd> Look &nbsp;·&nbsp;
+    <kbd>Left Click</kbd> Spawn / Grab<br>
+    <kbd>Right Click</kbd> Delete &nbsp;·&nbsp;
+    <kbd>G</kbd> Grab mode &nbsp;·&nbsp;
+    <kbd>F</kbd> Drop &nbsp;·&nbsp;
+    <kbd>R</kbd> Random color<br>
+    <kbd>C</kbd> Clear all &nbsp;·&nbsp;
+    <kbd>1-4</kbd> Tool mode &nbsp;·&nbsp;
+    <kbd>Esc</kbd> Release cursor
+  </div>
+  <button id="startBtn">CLICK TO PLAY</button>
+</div>
+
+<div id="toast"></div>
+
+<div id="crosshair"></div>
+
+<div id="hud">
+  <div id="toolMode">TOOL: <span id="modeLabel">SPAWN</span></div>
+  <div id="stats">
+    <div id="objCount">Objects: 0</div>
+    <div id="fpsDisplay">FPS: 60</div>
+  </div>
+  <div id="hint"></div>
+</div>
+
+<div id="toolbar">
+  <div id="toolbarTabs">
+    <div class="tab active" data-tab="shapes">Shapes</div>
+    <div class="tab" data-tab="complex">Complex</div>
+    <div class="tab" data-tab="tools">Tools</div>
+    <div class="tab" data-tab="settings">Settings</div>
+  </div>
+  <div id="toolbarContent"></div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/",
+    "cannon-es": "https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/dist/cannon-es.js"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import * as CANNON from 'cannon-es';
+import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
+
+const SPAWN_DIST = 6;
+const HELD_DIST = 5;
+const MAX_OBJECTS = 200;
+const GRAVITY = -15;
+
+const COLORS = {
+  red: 0xe23b3b, orange: 0xff7a3b, yellow: 0xffd84a, green: 0x4ae06a,
+  cyan: 0x4ad1ff, blue: 0x4a7bff, purple: 0x9b7bff, pink: 0xff6b9d,
+  white: 0xffffff, gray: 0x888888, dark: 0x333333, brown: 0x8b6914,
+};
+
+const spawnItems = {
+  shapes: [
+    { id:'box', icon:'⬜', label:'Box', geo:'box', w:0.8, h:0.8, d:0.8 },
+    { id:'sphere', icon:'⬤', label:'Sphere', geo:'sphere', r:0.5 },
+    { id:'cylinder', icon:'⬛', label:'Cylinder', geo:'cylinder', rt:0.5, rb:0.5, h:0.8 },
+    { id:'cone', icon:'△', label:'Cone', geo:'cone', r:0.5, h:1 },
+    { id:'torus', icon:'○', label:'Torus', geo:'torus', r:0.5, t:0.15 },
+    { id:'torusKnot', icon:'◎', label:'Knot', geo:'torusKnot', r:0.4, t:0.15 },
+    { id:'pyramid', icon:'◇', label:'Pyramid', geo:'pyramid', w:0.8, h:0.8, d:0.8 },
+    { id:'capsule', icon:'▯', label:'Capsule', geo:'capsule', r:0.3, h:0.6 },
+    { id:'icosahedron', icon:'⬠', label:'Icosa', geo:'ico', r:0.5 },
+    { id:'octahedron', icon:'⬡', label:'Octa', geo:'octa', r:0.5 },
+    { id:'dodecahedron', icon:'⬟', label:'Dodeca', geo:'dodeca', r:0.5 },
+    { id:'ring', icon:'⭕', label:'Ring', geo:'ring', ir:0.4, or:0.6 },
+  ],
+  complex: [
+    { id:'stair', icon:'⊞', label:'Stair', geo:'stair', w:0.8, h:0.6, d:0.8 },
+    { id:'wedge', icon:'⊿', label:'Wedge', geo:'wedge', w:0.8, h:0.8, d:0.8 },
+    { id:'pipe', icon:'◉', label:'Pipe', geo:'pipe', r:0.4, h:0.8, t:0.1 },
+    { id:'dome', icon:'⌒', label:'Dome', geo:'dome', r:0.5 },
+    { id:'grid', icon:'#', label:'Grid', geo:'grid', w:1, h:0.1, d:1, divs:3 },
+    { id:'spring', icon:'〰', label:'Spring', geo:'spring', r:0.3, h:0.8 },
+    { id:'arrow', icon:'↑', label:'Arrow', geo:'arrow', w:0.3, h:0.8 },
+    { id:'cross', icon:'✚', label:'Cross', geo:'cross', w:0.8, h:0.8, t:0.2 },
+    { id:'frame', icon:'□', label:'Frame', geo:'frame', w:0.8, h:0.8, t:0.1 },
+    { id:'lattice', icon:'⊞', label:'Lattice', geo:'lattice', w:0.8, h:0.8, d:0.8 },
+    { id:'spiral', icon:'꩜', label:'Spiral', geo:'spiral', r:0.4, h:0.8 },
+    { id:'helix', icon:'♨', label:'Helix', geo:'helix', r:0.3, h:0.8 },
+  ],
+  tools: [
+    { id:'spawnTool', icon:'✏️', label:'Spawn', action:'mode_spawn' },
+    { id:'grabTool', icon:'✊', label:'Grab', action:'mode_grab' },
+    { id:'deleteTool', icon:'🗑️', label:'Delete', action:'mode_delete' },
+    { id:'clearBtn', icon:'💥', label:'Clear All', action:'clear' },
+    { id:'reset', icon:'🔄', label:'Reset World', action:'reset' },
+  ],
+  settings: [
+    { id:'wireframe', icon:'◻️', label:'Wireframe', action:'toggle_wireframe' },
+    { id:'gridToggle', icon:'⊞', label:'Grid', action:'toggle_grid' },
+    { id:'fpsToggle', icon:'📊', label:'Show FPS', action:'toggle_fps' },
+  ],
+};
+
+let scene, camera, renderer, controls;
+let physWorld;
+let objects = [];
+let heldBody = null;
+let mode = 'spawn';
+let currentColor = '#6d54ff';
+let currentTab = 'shapes';
+let selectedItemId = 'box';
+let wireframeMode = false;
+let showGrid = true;
+let showFps = true;
+let gridHelper;
+let clock;
+let frameCount = 0;
+let fpsTime = 0;
+let fpsValue = 60;
+let isLocked = false;
+let spawnPreview = null;
+let toastTimeout;
+
+function init() {
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x0a0e1a);
+  scene.fog = new THREE.Fog(0x0a0e1a, 60, 100);
+  clock = new THREE.Clock();
+
+  camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 200);
+  camera.position.set(0, 2, 8);
+
+  renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.2;
+  document.body.prepend(renderer.domElement);
+
+  controls = new PointerLockControls(camera, renderer.domElement);
+  controls.addEventListener('lock', () => { isLocked = true; });
+  controls.addEventListener('unlock', () => { isLocked = false; });
+
+  setupLights();
+  setupGround();
+  setupPhysics();
+  setupUI();
+  setupEvents();
+  setupGrid();
+
+  animate();
+}
+
+function setupLights() {
+  const ambient = new THREE.AmbientLight(0x404060, 0.6);
+  scene.add(ambient);
+
+  const hemi = new THREE.HemisphereLight(0x6d54ff, 0x1a1a2e, 0.8);
+  scene.add(hemi);
+
+  const sun = new THREE.DirectionalLight(0xffeedd, 2);
+  sun.position.set(20, 30, 10);
+  sun.castShadow = true;
+  sun.shadow.mapSize.width = 2048;
+  sun.shadow.mapSize.height = 2048;
+  sun.shadow.camera.near = 1;
+  sun.shadow.camera.far = 60;
+  sun.shadow.camera.left = -30;
+  sun.shadow.camera.right = 30;
+  sun.shadow.camera.top = 30;
+  sun.shadow.camera.bottom = -30;
+  scene.add(sun);
+
+  const fill = new THREE.DirectionalLight(0x8888ff, 0.4);
+  fill.position.set(-10, 10, -10);
+  scene.add(fill);
+
+  const rim = new THREE.DirectionalLight(0xff6b9d, 0.3);
+  rim.position.set(0, -5, -15);
+  scene.add(rim);
+}
+
+function setupGround() {
+  const groundGeo = new THREE.PlaneGeometry(120, 120);
+  const groundMat = new THREE.MeshStandardMaterial({
+    color: 0x1a1a2e,
+    roughness: 0.9,
+    metalness: 0.0,
+  });
+  const ground = new THREE.Mesh(groundGeo, groundMat);
+  ground.rotation.x = -Math.PI / 2;
+  ground.position.y = -0.01;
+  ground.receiveShadow = true;
+  ground.name = 'ground';
+  scene.add(ground);
+
+  const grid = new THREE.GridHelper(120, 60, 0x6d54ff, 0x333366);
+  grid.position.y = 0;
+  grid.material.transparent = true;
+  grid.material.opacity = 0.3;
+  grid.name = 'gridHelper';
+  scene.add(grid);
+
+  const borderMat = new THREE.LineBasicMaterial({ color: 0x333366, transparent: true, opacity: 0.2 });
+  const borderGeo = new THREE.BufferGeometry().setFromPoints([
+    new THREE.Vector3(-60, 0, -60), new THREE.Vector3(60, 0, -60),
+    new THREE.Vector3(60, 0, 60), new THREE.Vector3(-60, 0, 60),
+    new THREE.Vector3(-60, 0, -60),
+  ]);
+  const border = new THREE.Line(borderGeo, borderMat);
+  border.name = 'border';
+  scene.add(border);
+}
+
+function setupPhysics() {
+  physWorld = new CANNON.World({
+    gravity: new CANNON.Vec3(0, GRAVITY, 0),
+  });
+
+  const defaultMat = new CANNON.Material('default');
+  const contactMat = new CANNON.ContactMaterial(defaultMat, defaultMat, {
+    friction: 0.5,
+    restitution: 0.3,
+  });
+  physWorld.addContactMaterial(contactMat);
+
+  const groundBody = new CANNON.Body({ mass: 0, material: defaultMat });
+  groundBody.addShape(new CANNON.Plane());
+  groundBody.quaternion.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), -Math.PI / 2);
+  physWorld.addBody(groundBody);
+
+  const wallMat = new CANNON.Material('wall');
+  const wallContact = new CANNON.ContactMaterial(defaultMat, wallMat, { friction: 0.5, restitution: 0.2 });
+  physWorld.addContactMaterial(wallContact);
+  const wallHalf = 60;
+
+  const wallBodies = [
+    { pos: [0, 5, -wallHalf], size: [wallHalf*2, 10, 0.5] },
+    { pos: [0, 5, wallHalf], size: [wallHalf*2, 10, 0.5] },
+    { pos: [-wallHalf, 5, 0], size: [0.5, 10, wallHalf*2] },
+    { pos: [wallHalf, 5, 0], size: [0.5, 10, wallHalf*2] },
+  ];
+  wallBodies.forEach(w => {
+    const body = new CANNON.Body({ mass: 0, material: wallMat });
+    body.addShape(new CANNON.Box(new CANNON.Vec3(w.size[0], w.size[1], w.size[2])));
+    body.position.set(w.pos[0], w.pos[1], w.pos[2]);
+    physWorld.addBody(body);
+  });
+}
+
+function setupGrid() {
+  gridHelper = new THREE.GridHelper(120, 60, 0x6d54ff, 0x333366);
+  gridHelper.position.y = 0;
+  gridHelper.material.transparent = true;
+  gridHelper.material.opacity = 0.3;
+  gridHelper.visible = showGrid;
+  scene.add(gridHelper);
+}
+
+function createPhysicsShape(item, physMat) {
+  const shape = item.geo;
+  switch (shape) {
+    case 'box':
+      return new CANNON.Box(new CANNON.Vec3(item.w/2, item.h/2, item.d/2));
+    case 'sphere':
+      return new CANNON.Sphere(item.r);
+    case 'cylinder':
+    case 'cone':
+      return new CANNON.Cylinder(item.rt || item.r, item.rb || item.r, item.h, 12);
+    case 'torus':
+    case 'torusKnot':
+      return new CANNON.Sphere(item.r * 0.6);
+    case 'pyramid':
+      return new CANNON.Box(new CANNON.Vec3(item.w*0.4, item.h*0.4, item.d*0.4));
+    case 'capsule':
+      return new CANNON.Cylinder(item.r, item.r, item.h + item.r*2, 12);
+    case 'ico':
+    case 'octa':
+    case 'dodeca':
+      return new CANNON.Sphere(item.r);
+    case 'ring':
+      return new CANNON.Torus(item.or * 0.5, item.t || 0.15, 8, 16);
+    case 'stair':
+      return new CANNON.Box(new CANNON.Vec3(item.w/2, item.h/2, item.d/2));
+    case 'wedge':
+      return new CANNON.Box(new CANNON.Vec3(item.w/2, item.h/2, item.d/2));
+    case 'pipe':
+      return new CANNON.Cylinder(item.r, item.r, item.h, 12);
+    case 'dome':
+      return new CANNON.Sphere(item.r);
+    case 'grid':
+      return new CANNON.Box(new CANNON.Vec3(item.w/2, item.h/2, item.d/2));
+    case 'spring':
+      return new CANNON.Cylinder(item.r * 1.5, item.r * 1.5, item.h, 8);
+    case 'arrow':
+      return new CANNON.Cylinder(0.05, 0.05, item.h, 6);
+    case 'cross':
+      return new CANNON.Box(new CANNON.Vec3(item.w/2, item.t/2, item.t/2));
+    case 'frame':
+      return new CANNON.Box(new CANNON.Vec3(item.w/2, item.t/2, item.t/2));
+    case 'lattice':
+      return new CANNON.Box(new CANNON.Vec3(item.w/2, item.h/2, item.d/2));
+    case 'spiral':
+      return new CANNON.Cylinder(item.r, item.r, item.h, 8);
+    case 'helix':
+      return new CANNON.Cylinder(item.r, item.r, item.h, 6);
+    default:
+      return new CANNON.Box(new CANNON.Vec3(0.4, 0.4, 0.4));
+  }
+}
+
+function createGeometry(item) {
+  const s = item;
+  switch (s.geo) {
+    case 'box': return new THREE.BoxGeometry(s.w, s.h, s.d);
+    case 'sphere': return new THREE.SphereGeometry(s.r, 24, 24);
+    case 'cylinder': return new THREE.CylinderGeometry(s.rt||s.r, s.rb||s.r, s.h, 24);
+    case 'cone': return new THREE.ConeGeometry(s.r, s.h, 24);
+    case 'torus': return new THREE.TorusGeometry(s.r, s.t||0.15, 16, 32);
+    case 'torusKnot': return new THREE.TorusKnotGeometry(s.r, s.t||0.15, 64, 16);
+    case 'pyramid': return new THREE.ConeGeometry(s.w*0.5, s.h, 4);
+    case 'capsule': return new THREE.CapsuleGeometry(s.r, s.h, 8, 16);
+    case 'ico': return new THREE.IcosahedronGeometry(s.r, 1);
+    case 'octa': return new THREE.OctahedronGeometry(s.r);
+    case 'dodeca': return new THREE.DodecahedronGeometry(s.r);
+    case 'ring': return new THREE.RingGeometry(s.ir||0.3, s.or||0.5, 24);
+    case 'stair': return createStairGeometry(s.w, s.h, s.d);
+    case 'wedge': return createWedgeGeometry(s.w, s.h, s.d);
+    case 'pipe': return createPipeGeometry(s.r, s.h, s.t||0.1);
+    case 'dome': return createDomeGeometry(s.r);
+    case 'grid': return createGridGeometry(s.w, s.h, s.d, s.divs||3);
+    case 'spring': return createSpringGeometry(s.r, s.h);
+    case 'arrow': return createArrowGeometry(s.w||0.3, s.h);
+    case 'cross': return createCrossGeometry(s.w, s.h, s.t);
+    case 'frame': return createFrameGeometry(s.w, s.h, s.t);
+    case 'lattice': return createLatticeGeometry(s.w, s.h, s.d);
+    case 'spiral': return createSpiralGeometry(s.r, s.h);
+    case 'helix': return createHelixGeometry(s.r, s.h);
+    default: return new THREE.BoxGeometry(0.5, 0.5, 0.5);
+  }
+}
+
+function createStairGeometry(w, h, d) {
+  const steps = 4;
+  const geo = new THREE.BufferGeometry();
+  const verts = [];
+  const stepH = h / steps;
+  const stepD = d / steps;
+  for (let i = 0; i < steps; i++) {
+    const y0 = i * stepH;
+    const z0 = i * stepD;
+    verts.push(
+      -w/2, y0, -z0,  w/2, y0, -z0,  w/2, y0+stepH, -z0,
+      -w/2, y0, -z0,  w/2, y0+stepH, -z0, -w/2, y0+stepH, -z0,
+      -w/2, y0, -z0-stepD,  w/2, y0, -z0-stepD,  w/2, y0+stepH, -z0-stepD,
+      -w/2, y0, -z0-stepD,  w/2, y0+stepH, -z0-stepD, -w/2, y0+stepH, -z0-stepD,
+      -w/2, y0, -z0, -w/2, y0, -z0-stepD, -w/2, y0+stepH, -z0-stepD,
+      -w/2, y0, -z0, -w/2, y0+stepH, -z0-stepD, -w/2, y0+stepH, -z0,
+      w/2, y0, -z0, w/2, y0+stepH, -z0-stepD, w/2, y0, -z0-stepD,
+      w/2, y0, -z0, w/2, y0+stepH, -z0, w/2, y0+stepH, -z0-stepD,
+    );
+  }
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+  geo.computeVertexNormals();
+  return geo;
+}
+
+function createWedgeGeometry(w, h, d) {
+  const geo = new THREE.BufferGeometry();
+  const hw = w/2, hh = h/2, hd = d/2;
+  const verts = [
+    -hw, -hh, -hd,  hw, -hh, -hd,  hw,  hh, -hd,
+    -hw, -hh, -hd,  hw,  hh, -hd, -hw,  hh, -hd,
+    -hw, -hh,  hd,  hw, -hh,  hd,  hw,  hh,  hd,
+    -hw, -hh,  hd,  hw,  hh,  hd, -hw,  hh,  hd,
+    -hw, -hh, -hd, -hw, -hh,  hd, -hw,  hh,  hd,
+    -hw, -hh, -hd, -hw,  hh,  hd, -hw,  hh, -hd,
+    hw, -hh, -hd,  hw,  hh, -hd,  hw,  hh,  hd,
+    hw, -hh, -hd,  hw,  hh,  hd,  hw, -hh,  hd,
+    -hw, -hh, -hd,  hw, -hh, -hd,  hw, -hh,  hd,
+    -hw, -hh, -hd,  hw, -hh,  hd, -hw, -hh,  hd,
+    -hw, hh, -hd,  hw, hh, -hd,  hw, hh,  hd,
+    -hw, hh, -hd,  hw, hh,  hd, -hw, hh,  hd,
+  ];
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+  geo.computeVertexNormals();
+  return geo;
+}
+
+function createPipeGeometry(r, h, t) {
+  const geo = new THREE.CylinderGeometry(r, r, h, 24, 1, true);
+  const inner = new THREE.CylinderGeometry(r-t, r-t, h*1.01, 24, 1, true);
+  const merged = mergeBufferGeometries([geo, inner]);
+  return merged || geo;
+}
+
+function createDomeGeometry(r) {
+  return new THREE.SphereGeometry(r, 24, 16, 0, Math.PI*2, 0, Math.PI/2);
+}
+
+function createGridGeometry(w, h, d, divs) {
+  const geo = new THREE.BoxGeometry(w, h, d);
+  const edges = new THREE.EdgesGeometry(geo);
+  const lineMat = new THREE.LineBasicMaterial({ color: 0xffffff });
+  const line = new THREE.LineSegments(edges, lineMat);
+  return new THREE.BoxGeometry(w, h, d);
+}
+
+function createSpringGeometry(r, h) {
+  const curve = new THREE.CatmullRomCurve3(
+    Array.from({length: 20}, (_, i) => {
+      const t = i / 19;
+      const angle = t * Math.PI * 6;
+      return new THREE.Vector3(
+        Math.cos(angle) * r,
+        t * h - h/2,
+        Math.sin(angle) * r
+      );
+    })
+  );
+  return new THREE.TubeGeometry(curve, 40, 0.05, 6, false);
+}
+
+function createArrowGeometry(w, h) {
+  const group = new THREE.Group();
+  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(w*0.3, w*0.3, h*0.6, 6));
+  shaft.position.y = -h*0.15;
+  const head = new THREE.Mesh(new THREE.ConeGeometry(w*0.8, h*0.3, 6));
+  head.position.y = h*0.35;
+  const merged = mergeBufferGeometries([
+    shaft.geometry.clone().translate(0, -h*0.15, 0),
+    head.geometry.clone().translate(0, h*0.35, 0),
+  ].filter(Boolean));
+  return merged || new THREE.CylinderGeometry(0.1, 0.1, h, 6);
+}
+
+function createCrossGeometry(w, h, t) {
+  const geo1 = new THREE.BoxGeometry(w, t, t);
+  const geo2 = new THREE.BoxGeometry(t, h, t);
+  const geo3 = new THREE.BoxGeometry(t, t, w);
+  const merged = mergeBufferGeometries([geo1, geo2, geo3]);
+  return merged || geo1;
+}
+
+function createFrameGeometry(w, h, t) {
+  const outer = new THREE.BoxGeometry(w, h, t);
+  const inner = new THREE.BoxGeometry(w-t*2, h-t*2, t*2);
+  return new THREE.BoxGeometry(w, h, t);
+}
+
+function createLatticeGeometry(w, h, d) {
+  const geo = new THREE.BoxGeometry(w, h, d);
+  const edges = new THREE.EdgesGeometry(geo);
+  const lineMat = new THREE.LineBasicMaterial({ color: 0xffffff });
+  const line = new THREE.LineSegments(edges, lineMat);
+  return geo;
+}
+
+function createSpiralGeometry(r, h) {
+  const pts = 30;
+  const curve = new THREE.CatmullRomCurve3(
+    Array.from({length: pts}, (_, i) => {
+      const t = i / (pts - 1);
+      const angle = t * Math.PI * 8;
+      return new THREE.Vector3(
+        Math.cos(angle) * r * (1 - t * 0.5),
+        t * h - h/2,
+        Math.sin(angle) * r * (1 - t * 0.5)
+      );
+    })
+  );
+  return new THREE.TubeGeometry(curve, 50, 0.04, 4, false);
+}
+
+function createHelixGeometry(r, h) {
+  const pts = 40;
+  const curve = new THREE.CatmullRomCurve3(
+    Array.from({length: pts}, (_, i) => {
+      const t = i / (pts - 1);
+      const angle = t * Math.PI * 10;
+      return new THREE.Vector3(
+        Math.cos(angle) * r,
+        t * h - h/2,
+        Math.sin(angle) * r
+      );
+    })
+  );
+  return new THREE.TubeGeometry(curve, 60, 0.04, 4, false);
+}
+
+function mergeBufferGeometries(geos) {
+  const valid = geos.filter(g => g && g.attributes && g.attributes.position);
+  if (valid.length < 2) return valid[0] || null;
+  try {
+    const totalVerts = valid.reduce((s, g) => s + g.attributes.position.count, 0);
+    const positions = new Float32Array(totalVerts * 3);
+    const normals = new Float32Array(totalVerts * 3);
+    let offset = 0;
+    valid.forEach(g => {
+      const pos = g.attributes.position.array;
+      const norm = g.attributes.normal ? g.attributes.normal.array : new Float32Array(pos.length);
+      positions.set(pos, offset * 3);
+      normals.set(norm, offset * 3);
+      offset += pos.length / 3;
+    });
+    const merged = new THREE.BufferGeometry();
+    merged.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    merged.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
+    merged.computeVertexNormals();
+    return merged;
+  } catch (e) {
+    return valid[0];
+  }
+}
+
+function getSpawnPosition() {
+  const dir = new THREE.Vector3();
+  camera.getWorldDirection(dir);
+  const start = camera.position.clone().add(dir.clone().multiplyScalar(2));
+  const end = camera.position.clone().add(dir.clone().multiplyScalar(30));
+
+  const raycaster = new THREE.Raycaster(camera.position, dir);
+  const meshes = objects.map(o => o.mesh).filter(m => m.visible);
+  const intersects = raycaster.intersectObjects(meshes);
+
+  if (intersects.length > 0) {
+    const hit = intersects[0];
+    const normal = hit.face.normal.clone();
+    normal.transformDirection(hit.object.matrixWorld);
+    return hit.point.clone().add(normal.multiplyScalar(0.5));
+  }
+
+  const groundRay = new THREE.Raycaster(camera.position, dir);
+  const ground = scene.getObjectByName('ground');
+  if (ground) {
+    const groundHit = groundRay.intersectObject(ground);
+    if (groundHit.length > 0 && groundHit[0].distance < 60) {
+      return groundHit[0].point.clone().add(new THREE.Vector3(0, 0.5, 0));
+    }
+  }
+
+  return camera.position.clone().add(dir.multiplyScalar(SPAWN_DIST));
+}
+
+function spawnObject(itemId, color, pos) {
+  if (objects.length >= MAX_OBJECTS) {
+    showToast('Max objects reached (' + MAX_OBJECTS + ')');
+    return;
+  }
+
+  let item;
+  for (const cat of Object.values(spawnItems)) {
+    const found = cat.find(i => i.id === itemId);
+    if (found) { item = found; break; }
+  }
+  if (!item || item.action) return;
+
+  const c = color || currentColor;
+  const colorNum = parseInt(c.replace('#', ''), 16);
+
+  const geo = createGeometry(item);
+  const mat = new THREE.MeshStandardMaterial({
+    color: colorNum,
+    roughness: 0.4,
+    metalness: 0.3,
+    envMapIntensity: 0.5,
+    wireframe: wireframeMode,
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+
+  const p = pos || getSpawnPosition();
+  mesh.position.copy(p);
+
+  const physMat = new CANNON.Material('object');
+  const shape = createPhysicsShape(item, physMat);
+  const body = new CANNON.Body({ mass: 1, material: physMat });
+  body.addShape(shape);
+  body.position.set(p.x, p.y, p.z);
+
+  const randomRot = new THREE.Euler(
+    (Math.random() - 0.5) * 0.5,
+    (Math.random() - 0.5) * 0.5,
+    (Math.random() - 0.5) * 0.5
+  );
+  const quat = new THREE.Quaternion().setFromEuler(randomRot);
+  mesh.quaternion.copy(quat);
+  body.quaternion.set(quat.x, quat.y, quat.z, quat.w);
+
+  scene.add(mesh);
+  physWorld.addBody(body);
+
+  const entry = { mesh, body, itemId, color: c };
+  objects.push(entry);
+  updateStats();
+
+  const contactMat = new CANNON.ContactMaterial(physMat, physMat, { friction: 0.5, restitution: 0.25 });
+  physWorld.addContactMaterial(contactMat);
+
+  const defaultMat = physWorld.materials.find(m => m.name === 'default');
+  if (defaultMat) {
+    const cm = new CANNON.ContactMaterial(physMat, defaultMat, { friction: 0.4, restitution: 0.2 });
+    physWorld.addContactMaterial(cm);
+  }
+
+  return entry;
+}
+
+function deleteObjectAtCrosshair() {
+  const dir = new THREE.Vector3();
+  camera.getWorldDirection(dir);
+  const raycaster = new THREE.Raycaster(camera.position, dir, 0.1, 30);
+  const meshes = objects.map(o => o.mesh);
+  const intersects = raycaster.intersectObjects(meshes);
+
+  if (intersects.length > 0) {
+    const hitMesh = intersects[0].object;
+    const idx = objects.findIndex(o => o.mesh === hitMesh);
+    if (idx !== -1) {
+      removeObject(idx);
+      showToast('Object deleted');
+      return true;
+    }
+  }
+  return false;
+}
+
+function removeObject(idx) {
+  const entry = objects[idx];
+  scene.remove(entry.mesh);
+  entry.mesh.geometry.dispose();
+  entry.mesh.material.dispose();
+  physWorld.removeBody(entry.body);
+  objects.splice(idx, 1);
+  updateStats();
+}
+
+function clearAllObjects() {
+  [...objects].forEach((_, i) => removeObject(0));
+  showToast('All objects cleared');
+}
+
+function grabObject() {
+  if (heldBody) {
+    dropObject();
+    return;
+  }
+
+  const dir = new THREE.Vector3();
+  camera.getWorldDirection(dir);
+  const raycaster = new THREE.Raycaster(camera.position, dir, 0.1, 30);
+  const meshes = objects.map(o => o.mesh);
+  const intersects = raycaster.intersectObjects(meshes);
+
+  if (intersects.length > 0) {
+    const hitMesh = intersects[0].object;
+    const entry = objects.find(o => o.mesh === hitMesh);
+    if (entry) {
+      heldBody = entry;
+      entry.body.mass = 0;
+      entry.body.updateMassProperties();
+      showToast('Object grabbed');
+    }
+  }
+}
+
+function dropObject() {
+  if (!heldBody) return;
+  heldBody.body.mass = 1;
+  heldBody.body.updateMassProperties();
+  heldBody.body.velocity.set(0, 0, 0);
+  heldBody = null;
+  showToast('Object released');
+}
+
+function resetWorld() {
+  clearAllObjects();
+  camera.position.set(0, 2, 8);
+  controls.lock();
+  showToast('World reset');
+}
+
+function showToast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimeout);
+  toastTimeout = setTimeout(() => el.classList.remove('show'), 2000);
+}
+
+function showHint(msg, duration) {
+  const el = document.getElementById('hint');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(el._timeout);
+  el._timeout = setTimeout(() => el.classList.remove('show'), duration || 2500);
+}
+
+function updateStats() {
+  document.getElementById('objCount').textContent = 'Objects: ' + objects.length;
+}
+
+function setMode(newMode) {
+  mode = newMode;
+  const labels = { spawn: 'SPAWN', grab: 'GRAB', delete: 'DELETE' };
+  document.getElementById('modeLabel').textContent = labels[mode] || newMode.toUpperCase();
+  if (mode === 'grab' && !heldBody) {
+    showHint('Click an object to grab it');
+  } else if (mode === 'delete') {
+    showHint('Click an object to delete it');
+  } else if (mode === 'spawn') {
+    showHint('Click to spawn objects');
+  }
+  document.querySelectorAll('.toolBtn[data-action]').forEach(b => {
+    b.classList.toggle('active', b.dataset.action === 'mode_' + mode);
+  });
+}
+
+function setupUI() {
+  const tabs = document.querySelectorAll('.tab');
+  tabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      tabs.forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      currentTab = tab.dataset.tab;
+      renderToolbar();
+    });
+  });
+
+  renderToolbar();
+}
+
+function renderToolbar() {
+  const container = document.getElementById('toolbarContent');
+  container.innerHTML = '';
+
+  const items = spawnItems[currentTab];
+  if (!items) return;
+
+  items.forEach(item => {
+    if (item.action) {
+      if (item.action.startsWith('mode_')) {
+        const btn = document.createElement('button');
+        btn.className = 'toolBtn' + (mode === item.action.replace('mode_', '') ? ' active' : '');
+        btn.dataset.action = item.action;
+        btn.innerHTML = item.icon + ' ' + item.label;
+        btn.addEventListener('click', () => setMode(item.action.replace('mode_', '')));
+        container.appendChild(btn);
+      } else if (item.action === 'clear') {
+        const btn = document.createElement('button');
+        btn.className = 'toolBtn danger';
+        btn.innerHTML = item.icon + ' ' + item.label;
+        btn.addEventListener('click', clearAllObjects);
+        container.appendChild(btn);
+      } else if (item.action === 'reset') {
+        const btn = document.createElement('button');
+        btn.className = 'toolBtn danger';
+        btn.innerHTML = item.icon + ' ' + item.label;
+        btn.addEventListener('click', resetWorld);
+        container.appendChild(btn);
+      } else if (item.action === 'toggle_wireframe') {
+        const btn = document.createElement('button');
+        btn.className = 'toolBtn' + (wireframeMode ? ' active' : '');
+        btn.innerHTML = item.icon + ' ' + item.label;
+        btn.addEventListener('click', () => {
+          wireframeMode = !wireframeMode;
+          btn.classList.toggle('active', wireframeMode);
+          objects.forEach(o => o.mesh.material.wireframe = wireframeMode);
+          showToast(wireframeMode ? 'Wireframe on' : 'Wireframe off');
+        });
+        container.appendChild(btn);
+      } else if (item.action === 'toggle_grid') {
+        const btn = document.createElement('button');
+        btn.className = 'toolBtn' + (showGrid ? ' active' : '');
+        btn.innerHTML = item.icon + ' ' + item.label;
+        btn.addEventListener('click', () => {
+          showGrid = !showGrid;
+          gridHelper.visible = showGrid;
+          btn.classList.toggle('active', showGrid);
+          showToast(showGrid ? 'Grid on' : 'Grid off');
+        });
+        container.appendChild(btn);
+      } else if (item.action === 'toggle_fps') {
+        const btn = document.createElement('button');
+        btn.className = 'toolBtn' + (showFps ? ' active' : '');
+        btn.innerHTML = item.icon + ' ' + item.label;
+        btn.addEventListener('click', () => {
+          showFps = !showFps;
+          btn.classList.toggle('active', showFps);
+          document.getElementById('fpsDisplay').style.display = showFps ? 'block' : 'none';
+        });
+        container.appendChild(btn);
+      }
+    } else {
+      const btn = document.createElement('button');
+      btn.className = 'spawnBtn' + (selectedItemId === item.id ? ' active' : '');
+      btn.innerHTML = '<div class="icon">' + item.icon + '</div><div class="label">' + item.label + '</div>';
+      btn.addEventListener('click', () => {
+        selectedItemId = item.id;
+        document.querySelectorAll('.spawnBtn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        setMode('spawn');
+        showHint('Selected: ' + item.label);
+      });
+      container.appendChild(btn);
+    }
+  });
+
+  const colorWrap = document.createElement('div');
+  colorWrap.id = 'colorPickerWrap';
+  colorWrap.innerHTML = '<label>Color</label><input type="color" id="colorInput" value="' + currentColor + '">';
+  colorWrap.addEventListener('input', (e) => { currentColor = e.target.value; });
+  container.appendChild(colorWrap);
+}
+
+function setupEvents() {
+  document.getElementById('startBtn').addEventListener('click', () => {
+    controls.lock();
+    document.getElementById('startScreen').style.display = 'none';
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (!isLocked) return;
+    const key = e.key;
+
+    if (key === '1') { setMode('spawn'); }
+    else if (key === '2') { setMode('grab'); }
+    else if (key === '3') { setMode('delete'); }
+    else if (key === '4') { clearAllObjects(); e.preventDefault(); }
+
+    if (key === 'g' || key === 'G') {
+      if (mode !== 'grab') {
+        setMode('grab');
+      } else {
+        grabObject();
+      }
+      e.preventDefault();
+    }
+    if (key === 'f' || key === 'F') {
+      dropObject();
+      e.preventDefault();
+    }
+    if (key === 'r' || key === 'R') {
+      const colors = Object.values(COLORS);
+      const randomColor = '#' + colors[Math.floor(Math.random() * colors.length)].toString(16).padStart(6, '0');
+      currentColor = randomColor;
+      document.getElementById('colorInput').value = currentColor;
+      showToast('Color: ' + currentColor);
+      e.preventDefault();
+    }
+    if (key === 'c' || key === 'C') {
+      clearAllObjects();
+      e.preventDefault();
+    }
+    if (key === 'Escape') {
+      if (controls.isLocked) {
+        controls.unlock();
+      }
+    }
+  });
+
+  renderer.domElement.addEventListener('click', () => {
+    if (!isLocked) return;
+    if (mode === 'spawn') {
+      spawnObject(selectedItemId, currentColor);
+    } else if (mode === 'grab') {
+      grabObject();
+    } else if (mode === 'delete') {
+      deleteObjectAtCrosshair();
+    }
+  });
+
+  renderer.domElement.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    if (isLocked) {
+      deleteObjectAtCrosshair();
+    }
+  });
+
+  window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+
+  controls.addEventListener('unlock', () => {
+    if (heldBody) dropObject();
+  });
+}
+
+function animate() {
+  requestAnimationFrame(animate);
+
+  const dt = Math.min(clock.getDelta(), 0.05);
+
+  frameCount++;
+  fpsTime += dt;
+  if (fpsTime >= 0.5) {
+    fpsValue = Math.round(frameCount / fpsTime);
+    frameCount = 0;
+    fpsTime = 0;
+    if (showFps) {
+      document.getElementById('fpsDisplay').textContent = 'FPS: ' + fpsValue;
+    }
+  }
+
+  if (heldBody) {
+    const dir = new THREE.Vector3();
+    camera.getWorldDirection(dir);
+    const targetPos = camera.position.clone().add(dir.multiplyScalar(HELD_DIST));
+    heldBody.body.position.lerp(new CANNON.Vec3(targetPos.x, targetPos.y, targetPos.z), 0.3);
+    heldBody.body.velocity.set(0, 0, 0);
+    heldBody.body.angularVelocity.set(0, 0, 0);
+
+    const targetQ = new THREE.Quaternion();
+    targetQ.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+    heldBody.body.quaternion.slerp(new CANNON.Quaternion(targetQ.x, targetQ.y, targetQ.z, targetQ.w), 0.1);
+  }
+
+  physWorld.step(1 / 60, dt, 3);
+
+  objects.forEach(entry => {
+    entry.mesh.position.copy(entry.body.position);
+    entry.mesh.quaternion.copy(entry.body.quaternion);
+  });
+
+  renderer.render(scene, camera);
+}
+
+init();
+</script>
+</body>
+</html>
