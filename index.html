@@ -942,7 +942,10 @@ function setupEvents() {
   });
 
   renderer.domElement.addEventListener('click', () => {
-    if (!isLocked) return;
+    if (!isLocked) {
+      controls.lock();
+      return;
+    }
     if (mode === 'spawn') {
       spawnObject(selectedItemId, currentColor);
     } else if (mode === 'grab') {
